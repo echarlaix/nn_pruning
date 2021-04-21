@@ -510,13 +510,14 @@ class ModelPatchingCoordinator:
         if 'labels' in teacher_inputs:
             del teacher_inputs['labels']
 
+        max_length = model_outputs['logits'].shape[1]
         with torch.no_grad():
             teacher_outputs = teacher(**teacher_inputs)
 
         loss_logits = 0
         for logit_name in self.logit_names:
             logits_stu = model_outputs[logit_name]
-            logits_tea = teacher_outputs[logit_name]
+            logits_tea = teacher_outputs[logit_name][:,:max_length,:]
 
             loss_logits_part = nn_functional.kl_div(
                 input=nn_functional.log_softmax(logits_stu / temperature, dim=-1),
