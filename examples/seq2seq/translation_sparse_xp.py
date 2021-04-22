@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Sparse Fine-tuning the library models for text summarization.
+Sparse Fine-tuning the library models for text translation.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -28,17 +28,17 @@ from nn_pruning.inference_model_patcher import optimize_model
 from nn_pruning.hp_naming import TrialShortNamer
 from nn_pruning.patch_coordinator import SparseTrainingArguments
 from nn_pruning.sparse_xp import SparseXP
-from .sum_sparse_train import SumSparseTrainer
-from .sum_xp import (
-    SumXP,
+from .translation_sparse_train import TranslationSparseTrainer
+from .translation_xp import (
+    TranslationXP,
     ModelArguments,
-    SumDataTrainingArguments,
+    TranslationDataTrainingArguments,
 )
 from .seq2seq_sparse_train import Seq2SeqXPTrainingArguments
 from transformers import AutoModelForSeq2SeqLM
 import tempfile
 
-class SparseSumShortNamer(TrialShortNamer):
+class SparseTranslationShortNamer(TrialShortNamer):
     DEFAULTS = {
         "adam_beta1": 0.9,
         "adam_beta2": 0.999,
@@ -96,7 +96,7 @@ class SparseSumShortNamer(TrialShortNamer):
         "no_cuda": False,
         "null_score_diff_threshold": 0.0,
         "num_train_epochs": 10,
-        "output_dir": "output/xsum_test",
+        "output_dir": "output/translation_test",
         "optimize_model_before_eval": "disabled",
         "overwrite_cache": 0,
         "overwrite_output_dir": 1,
@@ -107,7 +107,7 @@ class SparseSumShortNamer(TrialShortNamer):
         "regularization": "disabled",
         "regularization_final_lambda": 0.0,
         "remove_unused_columns": True,
-        "run_name": "output/xsum_test",
+        "run_name": "output/translation_test",
         "save_steps": 5000,
         "save_total_limit": 5,
         "seed": 17,
@@ -139,35 +139,38 @@ class SparseSumShortNamer(TrialShortNamer):
         "_n_gpu": 1,
         "max_seq_length": 128,
         "doc_stride": 128,
-        "train_file": "output/xsum_test/",
-        "validation_file": "output/xsum_test/",
-        "model_name_or_path": "facebook/bart-base-xsum",
-        "dataset_name": "xsum",
-        "dataset_config_name": None,
-        "pad_to_max_length": True,
+        "train_file": "output/translation_test/",
+        "validation_file": "output/translation_test/",
+        "model_name_or_path": "facebook/bart-base",
+        "dataset_name": "wmt16",
+        "dataset_config_name": "ro-en",
+        "source_lang": "en",
+        "target_lang": "ro",
+        "pad_to_max_length": False,
         "ignore_pad_token_for_loss": True,
         "max_source_length": 1024,
         "max_target_length": 128,
         "val_max_target_length": 128,
-        "num_beams": 6,
+        "num_beams": 1,
+        "forced_bos_token": None,
         "predict_with_generate": True,
         "sortish_sampler": False,
     }
 
-class SumSparseXP(SparseXP, SumXP):
+class TranslationSparseXP(SparseXP, TranslationXP):
     ARGUMENTS = {
         "model": ModelArguments,
-        "data": SumDataTrainingArguments,
+        "data": TranslationDataTrainingArguments,
         "training": Seq2SeqXPTrainingArguments,
         "sparse": SparseTrainingArguments,
     }
-    SUM_TRAINER_CLASS = SumSparseTrainer
-    SHORT_NAMER = SparseSumShortNamer
+    TRANSLATION_TRAINER_CLASS = TranslationSparseTrainer
+    SHORT_NAMER = SparseTranslationShortNamer
     CONSTRUCTOR = AutoModelForSeq2SeqLM
     LOGIT_NAMES = ["logits"]
 
     def __init__(self, params):
-        SumXP.__init__(self, params)
+        TranslationXP.__init__(self, params)
         SparseXP.__init__(self)
 
     def create_trainer(self, *args, **kwargs):

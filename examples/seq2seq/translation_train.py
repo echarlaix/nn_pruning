@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-A subclass of `Trainer` specific to Summary tasks
+A subclass of `Trainer` specific to translation tasks
 """
 
 import json
@@ -31,7 +31,7 @@ import datasets
 logger = logging.get_logger(__name__)
 
 
-class SumTrainer(Seq2SeqXPTrainer):
+class TranslationTrainer(Seq2SeqXPTrainer):
     def __init__(self, *args, eval_examples=None, post_process_function=None, **kwargs):
         self.model_args = kwargs.pop("model_args")
         self.data_args = kwargs.pop("data_args")
