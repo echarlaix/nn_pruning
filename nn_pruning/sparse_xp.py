@@ -78,6 +78,7 @@ class SparseXP:
 
         model_args = load_json_to_obj("model_args.json")
         sparse_args = load_json_to_obj("sparse_args.json")
+        data_args = load_json_to_obj("data_args.json")
 
         if hasattr(sparse_args, "final_finetune") and sparse_args.final_finetune:
             if dest_path is None:
@@ -88,8 +89,13 @@ class SparseXP:
 
         model_args.model_name_or_path = str(src_path)
 
-        model = cls._model_init(model_args, model_config)
-        patcher = cls.create_patching_coordinator(sparse_args=sparse_args, device="cuda", cache_dir=None)
+        model = cls._model_init(model_args, model_config, data_args)
+        patcher = cls.create_patching_coordinator(
+            sparse_args=sparse_args,
+            device="cuda",
+            cache_dir=None,
+            model_name_or_path=model_args.model_name_or_path
+        )
 
         patcher.patch_model(model, trial=None)
 

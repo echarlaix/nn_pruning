@@ -1,6 +1,6 @@
 from typing import Dict
 import re
-from transformers import BertConfig, BartConfig
+from transformers import BertConfig, BartConfig, T5Config
 
 class ModelStructure:
     PATTERN_PREFIX: str = ""
@@ -34,10 +34,14 @@ class ModelStructure:
         return False
 
     @classmethod
+    def is_decoder(cls, module_name):
+        if 'decoder' in module_name:
+            return True
+        return False
+
+    @classmethod
     def layer_index(cls, child_module_name):
         extracts = re.findall(r"[0-9]+", child_module_name)
-        if len(extracts) != 1:
-            return None
         return int(extracts[0])
 
 
@@ -76,14 +80,40 @@ class BartStructure(ModelStructure):
     FFN_LAYERS = ("interm_dense", "output_dense")
 
 
+class T5Structure(ModelStructure):
+    PATTERN_PREFIX = "(en|de)coder.block.[0-9]+.layer.[0-9]+."
+    LAYER_PATTERNS = dict(
+        query="SelfAttention.q",
+        key="SelfAttention.k",
+        value="SelfAttention.v",
+        att_dense="SelfAttention.o",
+        encoder_decoder_query="EncDecAttention.q",
+        encoder_decoder_key="EncDecAttention.k",
+        encoder_decoder_value="EncDecAttention.v",
+        encoder_decoder_att_dense="EncDecAttention.o",
+        interm_dense="DenseReluDense.wi",
+        output_dense="DenseReluDense.wo",
+    )
+    ATTENTION_PREFIX = ("SelfAttention", "EncDecAttention")
+    ATTENTION_LAYERS = ("query", "key", "value", "encoder_decoder_query", "encoder_decoder_key", "encoder_decoder_value")
+    MHA_LAYERS = ATTENTION_LAYERS + ("att_dense", "encoder_decoder_att_dense")
+    FFN_LAYERS = ("interm_dense", "output_dense")
+    NAME_CONFIG = dict(
+        hidden_size="d_model",
+        intermediate_size="d_ff",
+    )
+
+
 config2struct = {
     BertConfig: BertStructure,
-    BartConfig: BartStructure
+    BartConfig: BartStructure,
+    T5Config: T5Structure,
 }
 
 name2struct = {
     "bert": BertStructure,
-    "bart": BartStructure
+    "bart": BartStructure,
+    "t5": T5Structure,
 }
 
 def struct_from_config(model):

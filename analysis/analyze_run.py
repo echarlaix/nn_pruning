@@ -2,6 +2,9 @@ from examples.question_answering.qa_xp import QAXP
 from examples.question_answering.qa_sparse_xp import QASparseXP
 from examples.text_classification.glue_xp import GlueXP
 from examples.text_classification.glue_sparse_xp import GlueSparseXP
+from examples.seq2seq.summarization_xp import SummarizationXP
+from examples.seq2seq.summarization_sparse_xp import SummarizationSparseXP
+
 import examples.xp as xp
 from pathlib import Path
 import json
@@ -20,7 +23,7 @@ class ModelStatsExtractBase:
     def open_model(self):
         if self.copy_to_tmp_path:
             self.dest_path_ = tempfile.TemporaryDirectory()
-            self.dest_path = Path(self.dest_path_.name)
+            self.dest_path = str(Path(self.dest_path_.name))
         else:
             self.dest_path = None
 
@@ -28,6 +31,8 @@ class ModelStatsExtractBase:
             cls = QASparseXP
         elif self.task == "mnli":
             cls = GlueSparseXP
+        elif self.task == "cnn_dailymail":
+            cls = SummarizationSparseXP
         else:
             raise Exception(f"Unknown task {self.task}")
 
@@ -141,6 +146,8 @@ class ModelSpeedEvaluate(ModelStatsExtractBase):
             ret = QAXP.evaluate_model(model_name_or_path=self.dest_path, task="squad", optimize_mode=self.optimize_mode)
         elif self.task == "mnli":
             ret = GlueXP.evaluate_model(model_name_or_path=self.dest_path, task=self.task, optimize_mode=self.optimize_mode)
+        elif self.task == "cnn_dailymail":
+            ret = SummarizationXP.evaluate_model(model_name_or_path=self.dest_path, dataset_config_name="3.0.0", task=self.task, optimize_mode=self.optimize_mode)
         else:
             raise Exception(f"Unknown task {self.task}")
 
@@ -207,6 +214,7 @@ class ModelAddBasicReport:
 
 class ModelAnalysis:
     TASK_EVAL_INFO = {"squadv1":{"key":"eval_metrics.f1", "files":["eval_metrics"], "min":85},
+                      "cnn_dailymail": {"key": "eval_results.eval_rouge2", "files": ["eval_results"], "min": 18},
                       "mnli":{"key":"eval_results_mnli.eval_accuracy", "files":["eval_results_mnli", "eval_results_mnli-mm"], "min":0.7}}
 
     def __init__(self,
@@ -229,7 +237,6 @@ class ModelAnalysis:
 
     def process_checkpoint(self, checkpoint_path, force_speed = False):
         checkpoint_info = {}
-
         # Create base report
         base_speed_report_file = Path(f"files/base_speed_report_file_{self.task}.json")
         base_speed_report = None
@@ -272,7 +279,6 @@ class ModelAnalysis:
                         j = json.load(f)
                         infos[filename] = j
                 checkpoints.append((d.name, infos))
-
         # Sort checkpoints by training step
         checkpoints.sort(key = lambda x : self.checkpoint_index(x))
 

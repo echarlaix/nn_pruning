@@ -25,11 +25,15 @@ import torch.cuda
 import torch.nn as nn
 
 class TimingModule(nn.Module):
-    def __init__(self, model, repeat = 1):
+    def __init__(self, model, repeat=1, method_list=None):
         super().__init__()
         self.model = model
         self.reset()
         self.repeat = repeat
+        if method_list:
+            method_list = list(method_list)
+            for method_name in method_list:
+                setattr(self, method_name, getattr(model, method_name))
 
     def reset(self):
         self.elapsed = 0
@@ -101,7 +105,7 @@ class SparseTrainer:
         # We don't use .loss here since the model may return tuples instead of ModelOutput.
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
-        self.metrics["ce_loss"] += float(loss)
+        self.metrics["ce_loss"] += loss.item()
         loss, distil_loss = self.patch_coordinator.distil_loss_combine(loss, inputs, outputs)
         self.metrics["distil_loss"] += float(distil_loss)
         regu_loss, lamb, info = self.patch_coordinator.regularization_loss(model)
@@ -125,6 +129,12 @@ class SparseTrainer:
         self.schedule_threshold(False)
         self.log_prefix = "eval_"
         ret = super().evaluate(*args, **kwargs)
+        return ret
+
+    def predict(self, *args, **kwargs):
+        self.schedule_threshold(False)
+        self.log_prefix = "test_"
+        ret = super().predict(*args, **kwargs)
         return ret
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):

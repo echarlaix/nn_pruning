@@ -157,6 +157,17 @@ class SparseTrainingArguments:
             "help": "Regularization intensity for dense (attention lambda will be regularization_lambda * dense_lambda)."},
     )
 
+    decoder_attention_lambda: float = field(
+        default=None,
+        metadata={"help": "Regularization intensity for decoder attention (attention lambda will be regularization_lambda * decoder_attention_lambda)."},
+    )
+
+    decoder_dense_lambda: float = field(
+        default=None,
+        metadata={
+            "help": "Regularization intensity for decoder dense (attention lambda will be regularization_lambda * decoder_dense_lambda)."},
+    )
+
     distil_teacher_name_or_path: str = field(
         default=None,
         metadata={"help": "Path to the already SQuAD fine-tuned teacher model. Only for distillation."},
@@ -449,6 +460,9 @@ class ModelPatchingCoordinator:
             exclude_att_dense = not hasattr(self.sparse_args, "attention_output_with_dense") or self.sparse_args.attention_output_with_dense
             key = "attention" if self.model_structure.is_attention(name, exclude_att_dense=exclude_att_dense) else "dense"
 
+            prefix = 'decoder_' if self.model_structure.is_decoder(name) else 'encoder_'
+            key = prefix + key
+
             if key not in info:
                 info[key] = defaultdict(float)
 
@@ -461,12 +475,27 @@ class ModelPatchingCoordinator:
 
         if mode not in regul_modes:
             lamb = 0
-            lambdas = dict(attention=0, dense=0)
+            lambdas = {k: 0 for k in info.keys()}
+
         else:
             lamb = self.patcher_context.get_context_data("regu_lambda")
-
-            lambdas = dict(attention=self.sparse_args.attention_lambda * 0.5,
-                           dense=self.sparse_args.dense_lambda * 0.5)
+            lambdas = {}
+            n = len(info)
+            for k in info.keys():
+                if k.endswith('attention'):
+                    if k.startswith('decoder'):
+                        if self.sparse_args.decoder_attention_lambda is None:
+                            self.sparse_args.decoder_attention_lambda = self.sparse_args.attention_lambda
+                        lambdas[k] = self.sparse_args.decoder_attention_lambda / n
+                    else:
+                        lambdas[k] = self.sparse_args.attention_lambda / n
+                else:
+                    if k.startswith('decoder'):
+                        if self.sparse_args.decoder_dense_lambda is None:
+                            self.sparse_args.decoder_dense_lambda = self.sparse_args.dense_lambda
+                        lambdas[k] = self.sparse_args.decoder_dense_lambda / n
+                    else:
+                        lambdas[k] = self.sparse_args.dense_lambda / n
 
         info["total"] = defaultdict(float)
 
@@ -535,7 +564,7 @@ class ModelPatchingCoordinator:
 
     def create_optimizer_groups(self, model, args, sparse_args):
         # Prepare optimizer and schedule (linear warmup and decay)
-        no_decay = ["bias", "LayerNorm.weight", "NoNorm.weight", "layer_norm.weight", "layernorm_embedding.weight"]
+        no_decay = ["bias", "LayerNorm.weight", "NoNorm.weight", "layer_norm.weight", "layernorm_embedding.weight", "final_layer_norm.weight"]
 
         mask_params = []
         no_decay_params = []
