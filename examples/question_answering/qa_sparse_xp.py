@@ -148,6 +148,9 @@ class SparseQAShortNamer(TrialShortNamer):
         'mp_parameters': '',
         'qat': False,
         'qconfig': 'default',
+        "distil_alpha_hidden_states": 0.0,
+        "distil_alpha_attention_scores": 0.0,
+        "distil_alpha_embeddings": 0.0,
     }
 
 

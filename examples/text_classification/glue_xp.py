@@ -109,6 +109,11 @@ class GlueXP(XP):
             config=model_config,
             cache_dir=model_args.cache_dir,
         )
+
+        for k, v in model.named_parameters():
+            if "embedding" in k or "classifier" in k:
+                v.requires_grad = False
+                
         return model
 
     def create_config(self):

@@ -154,6 +154,9 @@ class SparseTranslationShortNamer(TrialShortNamer):
         "num_beams": 1,
         "predict_with_generate": True,
         "source_prefix": None,
+        "distil_alpha_hidden_states": 0.0,
+        "distil_alpha_attention_scores": 0.0,
+        "distil_alpha_embeddings": 0.0,
     }
 
 class TranslationSparseXP(SparseXP, TranslationXP):
