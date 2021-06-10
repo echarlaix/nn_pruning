@@ -95,6 +95,11 @@ class SparseTrainer:
 
         Subclass and override for custom behavior.
         """
+        if self.sparse_args.distil_alpha_attention_scores:
+            inputs["output_attentions"] = True
+        if self.sparse_args.distil_alpha_hidden_states or self.sparse_args.distil_alpha_embeddings:
+            inputs["output_hidden_states"] = True
+
         outputs = model(**inputs)
 
         # Save past state if it exists
@@ -106,8 +111,11 @@ class SparseTrainer:
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
         self.metrics["ce_loss"] += float(loss)
-        loss, distil_loss = self.patch_coordinator.distil_loss_combine(loss, inputs, outputs)
+        loss, distil_loss, emb_loss, att_loss, hid_loss = self.patch_coordinator.distil_loss_combine(loss, inputs, outputs)
         self.metrics["distil_loss"] += float(distil_loss)
+        self.metrics["emb_loss"] += float(emb_loss)
+        self.metrics["att_loss"] += float(att_loss)
+        self.metrics["hid_loss"] += float(hid_loss)
         regu_loss, lamb, info = self.patch_coordinator.regularization_loss(model)
 
         for kind, values in info.items():

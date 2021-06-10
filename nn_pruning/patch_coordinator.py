@@ -31,7 +31,10 @@ from .modules.masked_nn import (
     ChannelPruningModulePatcher,
     JointPruningModulePatcher,
     LinearPruningModulePatcher,
+    FactorizationModulePatcher,
     LinearPruningArgs,
+    FactorizationArgs,
+    FactorizationPruningArgs,
     MaskedLinear,
     MaskedLinearModelCompiler,
     GenericLinearPruningContextModule,
@@ -187,6 +190,21 @@ class SparseTrainingArguments:
         metadata={"help": "Distillation temperature. Only for distillation."},
     )
 
+    distil_alpha_embeddings: float = field(
+        default=0.0,
+        metadata={"help": "Distillation embeddings loss linear weight. Only for distillation."},
+    )
+
+    distil_alpha_attention_scores: float = field(
+        default=0.0,
+        metadata={"help": "Distillation attention scores loss linear weight. Only for distillation."},
+    )
+
+    distil_alpha_hidden_states: float = field(
+        default=0.0,
+        metadata={"help": "Distillation hidden states loss linear weight. Only for distillation."},
+    )
+
     final_finetune: bool = field(
         default=False,
         metadata={
@@ -259,6 +277,13 @@ class SparseTrainingArguments:
         metadata={"help": "The quantization scheme configuration to use for QAT"},
     )
 
+    factorization_rank: int = field(
+        default=None,
+        metadata={
+            "help": "Factorization rank."
+        },
+    )
+
     @classmethod
     def hybrid(cls, regularization_lambda):
         sparse_args = cls()
@@ -317,8 +342,8 @@ class ModelPatchingCoordinator:
         sparse_args = self.sparse_args
 
         if sparse_args.distil_teacher_name_or_path is not None:
-            assert sparse_args.distil_alpha_ce > 0.0
-            assert sparse_args.distil_alpha_ce + sparse_args.distil_alpha_teacher > 0.0
+            assert sparse_args.distil_alpha_ce >= 0.0
+            assert sparse_args.distil_alpha_ce + sparse_args.distil_alpha_teacher >= 0.0
 
             model_config = AutoConfig.from_pretrained(sparse_args.distil_teacher_name_or_path, cache_dir=cache_dir)
 
@@ -538,8 +563,8 @@ class ModelPatchingCoordinator:
         sparse_args = self.sparse_args
         teacher = self.create_teacher()
 
-        if teacher == None:
-            return ce_loss, 0.0
+        if teacher is None:
+            return ce_loss, 0.0, 0.0, 0.0, 0.0
 
         temperature = sparse_args.distil_temperature
 
@@ -549,7 +574,7 @@ class ModelPatchingCoordinator:
 
         teacher_inputs = {}
         for k,v in teacher_inputs_.items():
-            teacher_inputs[k] = v.detach().clone()
+            teacher_inputs[k] = v.detach().clone() if not isinstance(v, bool) else v
 
         with torch.no_grad():
             teacher_outputs = teacher(**teacher_inputs)
@@ -569,10 +594,34 @@ class ModelPatchingCoordinator:
 
         loss_logits = loss_logits / len(self.logit_names)
 
+        loss_attention_scores = 0.0
+        if model_outputs.attentions is not None:
+            for i in range(len(model_outputs.attentions)):
+                attention_stu = model_outputs["attentions"][i]
+                attention_tea = teacher_outputs["attentions"][i].detach().clone()
+                loss_attention_scores_part = nn_functional.mse_loss(attention_stu, attention_tea)
+                loss_attention_scores = loss_attention_scores + loss_attention_scores_part
+            loss_attention_scores = loss_attention_scores / len(model_outputs.attentions)
+
+        loss_embeddings = 0.0
+        loss_hidden_states = 0.0
+        if model_outputs.hidden_states is not None:
+            embeddings_stu = model_outputs["hidden_states"][0]
+            embeddings_tea = teacher_outputs["hidden_states"][0].detach().clone()
+            loss_embeddings += nn_functional.mse_loss(embeddings_stu, embeddings_tea)
+
+            for i in range(1, len(model_outputs.hidden_states)):
+                hidden_state_stu = model_outputs["hidden_states"][i]
+                hidden_state_tea = teacher_outputs["hidden_states"][i].detach().clone()
+                loss_hidden_states_part = nn_functional.mse_loss(hidden_state_stu, hidden_state_tea)
+                loss_hidden_states = loss_hidden_states + loss_hidden_states_part
+            loss_hidden_states = loss_hidden_states / (len(model_outputs.hidden_states) - 1)
+
         loss = sparse_args.distil_alpha_teacher * loss_logits + sparse_args.distil_alpha_ce * ce_loss
+        loss += sparse_args.distil_alpha_attention_scores * loss_attention_scores
+        loss += sparse_args.distil_alpha_hidden_states * loss_hidden_states
 
-        return loss, loss_logits
-
+        return loss, loss_logits, loss_embeddings, loss_attention_scores, loss_hidden_states
 
     def create_optimizer_groups(self, model, args, sparse_args):
         # Prepare optimizer and schedule (linear warmup and decay)
@@ -632,7 +681,34 @@ class ModelPatchingCoordinator:
 
         patcher_context = self.patcher_context
 
-        if attention_pruning_method_parts[0] != "disabled" or sparse_args.ampere_pruning_method != "disabled":
+        if attention_pruning_method_parts[1].endswith("factorization"):
+            if attention_pruning_method_parts[0] == "disabled":
+                args_attention = FactorizationArgs(
+                    method=attention_pruning_method_parts[0],
+                    submethod=attention_pruning_method_parts[1],
+                    rank=sparse_args.factorization_rank,
+                )
+            else:
+                args_attention = FactorizationPruningArgs(
+                    method=attention_pruning_method_parts[0],
+                    submethod=attention_pruning_method_parts[1],
+                    ampere_method=sparse_args.ampere_pruning_method,
+                    block_rows=sparse_args.attention_block_rows,
+                    block_cols=sparse_args.attention_block_cols,
+                    bias_mask=bias_mask,
+                    min_elements=linear_min_parameters,
+                    rank=sparse_args.factorization_rank,
+                )
+
+            p_attention = FactorizationModulePatcher(
+                patcher_context,
+                args_attention,
+                model_structure=self.model_structure
+            )
+
+            p_attention_t = p_attention
+
+        elif attention_pruning_method_parts[0] != "disabled" or sparse_args.ampere_pruning_method != "disabled":
             args_attention = LinearPruningArgs(
                 method=attention_pruning_method_parts[0],
                 submethod=attention_pruning_method_parts[1],

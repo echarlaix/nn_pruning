@@ -65,11 +65,21 @@ class InitDirective:
     kind: str = "constant"
     scale: float = 0.0
 
-
 @dataclass
 class LinearPruningArgs(RuntimeLinearPruningArgs):
     mask_init: InitDirective = InitDirective()
     ampere_init: InitDirective = InitDirective()
+
+@dataclass
+class FactorizationPruningArgs(LinearPruningArgs):
+    rank: int = None
+
+@dataclass
+class FactorizationArgs:
+    method: str
+    submethod: str
+    ampere_method: str = "disabled"
+    rank: int = None
 
 
 class GenericLinearPruningContextModule(PatcherContextModule):
@@ -155,6 +165,16 @@ class AmpereLinearPruningContextModule(GenericLinearPruningContextModule):
 
         self.mask_scores = nn.Parameter(torch.Tensor(size=ampere_mask_size))
         self.init_masks(self.args.ampere_init)
+
+
+class FactorizationSingleDimensionLinearPruningContextModule(GenericLinearPruningContextModule):
+    def __init__(self, shape, args: FactorizationPruningArgs):
+        super().__init__(shape, args)
+        assert self.args.block_rows == 1
+        assert self.args.block_cols == 1
+        size = (shape,)
+        self.mask_scores = nn.Parameter(torch.zeros(size=size))
+        self.init_masks(self.args.mask_init)
 
 
 class AmpereMaskModule(nn.Module):
@@ -287,7 +307,7 @@ class MaskModule(nn.Module):
             dividers = args.block_rows, args.block_cols
             for i, m in enumerate(mask_scores):
                 if m is None:
-                    assert submethod == "1d_alt"
+                    assert submethod in ["1d_alt", "1d_factorization"]
                     mask_scores[i] = torch.ones(weight.shape[i] // dividers[i], device=weight.device)
 
             mask_scores = mask_scores[0].unsqueeze(-1).matmul(mask_scores[1].unsqueeze(0))
@@ -432,6 +452,42 @@ class MaskedLinear(ReplacementModule):
         return ret
 
 
+class FactorizedLinear(ReplacementModule):
+    def __init__(
+        self,
+        linear_module: nn.Linear,
+        mask_context_modules: List[LinearPruningContextModule],
+        ampere_context_module: AmpereLinearPruningContextModule,
+        args: FactorizationArgs,
+        rank: int,
+    ):
+        super().__init__()
+
+        assert isinstance(linear_module, nn.Linear)
+        assert rank > 0
+        self.in_dim = linear_module.weight.shape[0]
+        self.out_dim = linear_module.weight.shape[1]
+        self.is_bias = linear_module.bias is not None
+        self.args = args
+        self.rank = rank
+        self.linear1 = nn.Linear(self.in_dim,  self.rank, bias=False)
+        self.linear2 = nn.Linear( self.rank, self.out_dim, bias=self.is_bias)
+
+        if self.args.method != "disabled":
+            self.linear1 = MaskedLinear(self.linear1, [mask_context_modules, None], ampere_context_module, self.args)
+            self.linear2 = MaskedLinear(self.linear2, [None, mask_context_modules], ampere_context_module, self.args)
+
+    def set_context(self, context):
+        self._context = context
+        if self.args.method != "disabled":
+            for name, module in self.named_modules():
+                if isinstance(module, MaskedLinear):
+                    module.set_context(context)
+
+    def forward(self, input):
+        return self.linear2(self.linear1(input))
+
+
 class LinearPruningModulePatcher(ModulePatcher):
     def __init__(
         self,
@@ -460,7 +516,7 @@ class LinearPruningModulePatcher(ModulePatcher):
         if method not in PRUNING_METHODS:
             raise RuntimeError(f"Unknown pruning method '{method}', should be in {PRUNING_METHODS}")
 
-        PRUNING_SUB_METHODS = ["default", "1d", "1d_alt", "joint"]
+        PRUNING_SUB_METHODS = ["default", "1d", "1d_alt", "joint", "1d_factorization", "factorization"]
         if submethod not in PRUNING_SUB_METHODS:
             raise RuntimeError(f"Unknown pruning sub method '{submethod}', should be in {PRUNING_SUB_METHODS}")
 
@@ -585,6 +641,32 @@ class MaskedLinearModelCompiler(ModelPatcher):
     def new_child_module(self, child_module_name, child_module, patch_info):
         return child_module.compile()
 
+
+class FactorizationModulePatcher(LinearPruningModulePatcher):
+    def __init__(self, context: PatcherContext, args: FactorizationArgs, model_structure: ModelStructure):
+        super().__init__(context, args, model_structure=model_structure)
+
+    def create_context_module(self, child_module_name, child_module, key, rank):
+        args = self.args
+        prefix = key[0]
+        if prefix == "mask_1d":
+            assert args.submethod == "1d_factorization"
+            return FactorizationSingleDimensionLinearPruningContextModule(rank, args)
+        else:
+            raise RuntimeError(f"Unknown context module kind {prefix}")
+
+    def patch(self, child_module_name, child_module):
+        ampere_context_module = None
+        rank = self.args.rank
+        if rank is None:
+            shape = child_module.weight.shape
+            assert shape[0] + shape[1] > 0
+            rank = shape[0] * shape[1] // (shape[0] + shape[1])
+        if self.args.method != "disabled":
+            mask_context_module = self.get_context_module(child_module_name, child_module, kind="mask_1d", rank=rank)
+        else:
+            mask_context_module = []
+        return FactorizedLinear(child_module, mask_context_module, ampere_context_module, self.args, rank)
 
 
 def head_mask(config, device):
