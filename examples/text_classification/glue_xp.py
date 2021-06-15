@@ -130,8 +130,7 @@ class GlueXP(XP):
             label2id = {v: k for k, v in id2label.items()}
             kwargs = dict(id2label=id2label, label2id=label2id)
         else:
-            config = AutoConfig.from_pretrained(config_path)
-            kwargs = dict(id2label=config.id2label, label2id=config.label2id)
+            kwargs = {}
 
         self.config = AutoConfig.from_pretrained(
             config_path,

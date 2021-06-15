@@ -118,7 +118,7 @@ class LinearPruningContextModule(GenericLinearPruningContextModule):
 class BlockLinearPruningContextModule(LinearPruningContextModule):
     def __init__(self, shape, args: LinearPruningArgs):
         super().__init__(shape, args)
-        assert args.submethod == "default"
+        assert args.submethod in ["default", "joint"]
         self.mask_scores = nn.Parameter(torch.Tensor(size=self.mask_size))
         self.init_masks(self.args.mask_init)
 

@@ -654,20 +654,78 @@ class ModelPatchingCoordinator:
             )
 
             if args_attention.submethod == "joint":
-                p_attention = JointPruningModulePatcher(patcher_context, args_attention, model_structure=self.model_structure, suffix=".attention")
-                p_attention_t = JointPruningModulePatcher(patcher_context, args_attention_t, model_structure=self.model_structure, suffix=".attention")
+                p_attention = JointPruningModulePatcher(
+                    patcher_context,
+                    args_attention,
+                    model_structure=self.model_structure,
+                    suffix="attention"
+                )
+                p_query, p_key, p_value = p_attention, p_attention, p_attention
+
+                p_out = JointPruningModulePatcher(
+                    patcher_context,
+                    args_attention_t,
+                    model_structure=self.model_structure,
+                    suffix="attention"
+                )
+            elif args_attention.submethod == "paired":
+
+                args_att_qk = LinearPruningArgs(
+                    method=attention_pruning_method_parts[0],
+                    submethod="joint",
+                    ampere_method=sparse_args.ampere_pruning_method,
+                    block_rows=sparse_args.attention_block_rows,
+                    block_cols=sparse_args.attention_block_cols,
+                    bias_mask=bias_mask,
+                    min_elements=linear_min_parameters,
+                )
+
+                p_att_qk = JointPruningModulePatcher(
+                    patcher_context,
+                    args_att_qk,
+                    model_structure=self.model_structure,
+                    suffix="att_qk"
+                )
+
+                p_query, p_key = p_att_qk, p_att_qk
+
+                args_att_vout = LinearPruningArgs(
+                    method=attention_pruning_method_parts[0],
+                    submethod="1d_alt",
+                    ampere_method=sparse_args.ampere_pruning_method,
+                    block_rows=1,
+                    block_cols=1,
+                    bias_mask=bias_mask,
+                    min_elements=linear_min_parameters,
+                )
+
+                p_att_vout = ChannelPruningModulePatcher(
+                    patcher_context,
+                    args_att_vout,
+                    model_structure=self.model_structure,
+                    suffix="att_vout"
+                )
+
+                p_value, p_out = p_att_vout, p_att_vout
+
             else:
-                p_attention = LinearPruningModulePatcher(patcher_context,
-                                                         args_attention,
-                                                         model_structure=self.model_structure,
-                                                         row_additive_mask = self.layer_head_mask)
-                p_attention_t = LinearPruningModulePatcher(patcher_context,
-                                                           args_attention_t,
-                                                           model_structure = self.model_structure,
-                                                           col_additive_mask = self.layer_head_mask)
+                p_attention = LinearPruningModulePatcher(
+                    patcher_context,
+                    args_attention,
+                    model_structure=self.model_structure,
+                    row_additive_mask = self.layer_head_mask
+                )
+
+                p_query, p_key, p_value = p_attention, p_attention, p_attention
+
+                p_out = LinearPruningModulePatcher(
+                    patcher_context,
+                    args_attention_t,
+                    model_structure = self.model_structure,
+                    col_additive_mask = self.layer_head_mask
+                )
         else:
-            p_attention = None
-            p_attention_t = None
+            p_query, p_key, p_value, p_out = None, None, None, None
 
         dense_pruning_method_parts = self.parse_pruning_method(sparse_args.dense_pruning_method)
 
@@ -683,27 +741,32 @@ class ModelPatchingCoordinator:
             )
             if args_dense.submethod.startswith("1d"):
                 p_dense = ChannelPruningModulePatcher(
-                    patcher_context, args_dense, model_structure=self.model_structure, suffix="dense"
+                    patcher_context,
+                    args_dense,
+                    model_structure=self.model_structure,
+                    suffix="dense"
                 )
             else:
-                p_dense = LinearPruningModulePatcher(patcher_context, args_dense, model_structure=self.model_structure)
+                p_dense = LinearPruningModulePatcher(
+                    patcher_context,
+                    args_dense,
+                    model_structure=self.model_structure
+                )
         else:
             p_dense = None
 
         if not hasattr(sparse_args, "attention_output_with_dense") or sparse_args.attention_output_with_dense:
-            p_att_dense = p_dense
-        else:
-            p_att_dense = p_attention_t
+            p_out = p_dense
 
         module_patchers = dict(
-            query=p_attention,
-            key=p_attention,
-            value=p_attention,
-            att_dense=p_att_dense,
-            encoder_decoder_query=p_attention,
-            encoder_decoder_key=p_attention,
-            encoder_decoder_value=p_attention,
-            encoder_decoder_att_dense=p_att_dense,
+            query=p_query,
+            key=p_key,
+            value=p_value,
+            att_dense=p_out,
+            encoder_decoder_query=p_query,
+            encoder_decoder_key=p_key,
+            encoder_decoder_value=p_value,
+            encoder_decoder_att_dense=p_out,
             interm_dense=p_dense,
             output_dense=p_dense,
         )
