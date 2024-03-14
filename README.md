@@ -55,6 +55,31 @@ The documentation is [here](docs/HOWTO.md).
 
 
 
+
+<table>
+<tr><th> Reranking </th><th> Retrieval </th></tr>
+<tr><td>
+
+|           |  int8  |  fp32  |  diff  |
+| --------- | ------ | ------ | ------ |
+| BGE-small | 0.5826 | 0.5836 | -0.17% |
+| BGE-base  | 0.5886 | 0.5886 |  0%    |
+| BGE-large | 0.5985 | 0.6003 | -0.3%  |
+
+</td><td>
+
+|  int8  |  fp32  |  diff  |
+| ------ | ------ | ------ |
+| 0.5826 | 0.5836 | -0.17% |
+| 0.5886 | 0.5886 |  0%    |
+| 0.5985 | 0.6003 | -0.3%  |
+
+
+</td></tr> </table>
+
+
+
+
 ## Installation
 
 ### User installlation
