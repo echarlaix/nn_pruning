@@ -28,6 +28,30 @@ The documentation is [here](docs/HOWTO.md).
 
 
 
+<table>
+<tr><th>Table 1 Heading 1 </th><th>Table 1 Heading 2</th></tr>
+<tr><td>
+
+|           |  Reranking               |
+|           |  int8  |  fp32  |  diff  |
+| --------- | ------ | ------ | ------ |
+| BGE-small | 0.5826 | 0.5836 | -0.17% |
+| BGE-base  | 0.5886 | 0.5886 |  0%    |
+| BGE-large | 0.5985 | 0.6003 | -0.3%  |
+
+</td><td>
+
+|           |  Retrieval               |
+|           |  int8  |  fp32  |  diff  |
+| --------- | ------ | ------ | ------ |
+| BGE-small | 0.5826 | 0.5836 | -0.17% |
+| BGE-base  | 0.5886 | 0.5886 |  0%    |
+| BGE-large | 0.5985 | 0.6003 | -0.3%  |
+
+
+</td></tr> </table>
+
+
 
 
 
