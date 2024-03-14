@@ -17,6 +17,20 @@ You can read more about block sparsity and why it matters for performance on the
 ## Documentation
 The documentation is [here](docs/HOWTO.md).
 
+---
+|           |  Reranking               | Retrieval                |
+|           |  int8  |  fp32  |  diff  |  int8  |  fp32  |  diff  |
+| --------- | ------ | ------ | ------ | ------ | ------ | ------ |
+| BGE-small | 0.5826 | 0.5836 | -0.17% | 0.5138 | 0.5168 | -0.58% |
+| BGE-base  | 0.5886 | 0.5886 |  0%    | 0.5242 | 0.5325 | -1.55% |
+| BGE-large | 0.5985 | 0.6003 | -0.3%  | 0.5346 | 0.5429 | -1.53% |
+---
+
+
+
+
+
+
 ## Installation
 
 ### User installlation
