@@ -82,6 +82,43 @@ The documentation is [here](docs/HOWTO.md).
 
 ## Installation
 
+
+
+
+
+
+<table>
+<tr><th>  <tr><th> Reranking </th><th> Retrieval </th></tr>
+<tr><td>
+
+|           |
+| --------- |
+| BGE-small |
+| BGE-base  |
+| BGE-large |
+
+</td><td>
+
+|  int8  |  fp32  |  diff  |
+| ------ | ------ | ------ |
+| 0.5826 | 0.5836 | -0.17% |
+| 0.5886 | 0.5886 |  0%    |
+| 0.5985 | 0.6003 | -0.3%  |
+
+</td></tr> </table>
+
+</td><td>
+
+|  int8  |  fp32  |  diff  |
+| ------ | ------ | ------ |
+| 0.5138 | 0.5168 | -0.58% |
+| 0.5242 | 0.5325 | -1.55% |
+| 0.5346 | 0.5429 | -1.53% |
+
+</td></tr> </table>
+
+
+
 ### User installlation
 
 You can install `nn_pruning` using `pip` as follows:
