@@ -91,7 +91,7 @@ The documentation is [here](docs/HOWTO.md).
 <tr><th> Models  </th><th>   Reranking </th><th> Retrieval </th></tr>
 <tr><td>
 
-| precision |
+|           |
 | --------- |
 | BGE-small |
 | BGE-base  |
