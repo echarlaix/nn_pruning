@@ -105,8 +105,6 @@ The documentation is [here](docs/HOWTO.md).
 | 0.5886 | 0.5886 |  0%    |
 | 0.5985 | 0.6003 | -0.3%  |
 
-</td></tr>
-
 </td><td>
 
 |  int8  |  fp32  |  diff  |
