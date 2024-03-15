@@ -88,7 +88,7 @@ The documentation is [here](docs/HOWTO.md).
 
 
 <table>
-<tr><th>  <tr><th> Reranking </th><th> Retrieval </th></tr>
+<tr><th> Models  <tr><th> Reranking </th><th> Retrieval </th></tr>
 <tr><td>
 
 |           |
